@@ -114,7 +114,7 @@
 </head>
 <body>
 
-<div class="container" id="reportArea">
+<div class="container">
     <h2>Üretim Takip ve Barkod Sayacı</h2>
     
     <div class="form-group">
@@ -137,8 +137,9 @@
     <button class="btn btn-pdf" onclick="downloadPDF()">PDF Rapor İndir / Yazdır</button>
     <button class="btn btn-danger" onclick="resetData()">Sayımları Sıfırla</button>
 
-    <div id="reportSection" style="display:block; margin-top: 15px;">
-        <h3>Üretim Raporu</h3>
+    <!-- هذا هو القسم الذي سيتم طباعته في الـ PDF حصراً -->
+    <div id="pdfReportArea" style="display:block; margin-top: 15px; background: #fff; padding: 10px; border-radius: 8px;">
+        <h3 style="text-align: center; color: #333; margin-bottom: 5px;">Üretim Raporu</h3>
         <p style="font-size: 12px; color: #666; text-align: center; margin: 2px 0;" id="reportDate"></p>
         <table>
             <thead>
@@ -159,7 +160,7 @@
 
 <script>
     let products = JSON.parse(localStorage.getItem('production_products')) || {};
-    let counts = JSON.parse(localStorage.getItem('production_counts_v4')) || {};
+    let counts = JSON.parse(localStorage.getItem('production_counts_v5')) || {};
     let lastScanned = "";
     let codeReader = new ZXing.BrowserBarcodeReader();
     let selectedDeviceId = null;
@@ -246,7 +247,7 @@
 
         let key = formNo + "_" + code;
         counts[key] = (counts[key] || 0) + 1;
-        localStorage.setItem('production_counts_v4', JSON.stringify(counts));
+        localStorage.setItem('production_counts_v5', JSON.stringify(counts));
 
         document.getElementById('productName').innerText = products[code];
         document.getElementById('productCount').innerText = counts[key];
@@ -259,7 +260,7 @@
         let key = formNo + "_" + code;
         if (counts[key] && counts[key] > 0) {
             counts[key] -= 1;
-            localStorage.setItem('production_counts_v4', JSON.stringify(counts));
+            localStorage.setItem('production_counts_v5', JSON.stringify(counts));
             updateReportTable();
             
             let currentForm = document.getElementById('formNoInput').value.trim();
@@ -314,7 +315,7 @@
         let key = formNo + "_" + code;
         if (confirm(`Form: ${formNo} için bu ürünü listeden silmek istediğinizden emin misiniz?`)) {
             delete counts[key];
-            localStorage.setItem('production_counts_v4', JSON.stringify(counts));
+            localStorage.setItem('production_counts_v5', JSON.stringify(counts));
             updateReportTable();
             document.getElementById('productName').innerText = "-";
             document.getElementById('productCount').innerText = "0";
@@ -323,15 +324,18 @@
     }
 
     function showReport() {
-        let section = document.getElementById('reportSection');
+        let section = document.getElementById('pdfReportArea');
         section.style.display = section.style.display === 'none' ? 'block' : 'none';
     }
 
     function downloadPDF() {
-        let videoEl = document.getElementById('video');
-        videoEl.style.display = 'none';
+        // تحديد القسم المراد طباعته حصراً (التقرير فقط بدون الكاميرا والأزرار العلوية)
+        let element = document.getElementById('pdfReportArea');
+        
+        // إخفاء أزرار العمليات (Düzenle, Sil, -1) مؤقتاً أثناء إنشاء ملف الـ PDF
+        let actionCells = document.querySelectorAll('.no-pdf');
+        actionCells.forEach(cell => cell.style.display = 'none');
 
-        let element = document.getElementById('reportArea');
         let opt = {
             margin:       10,
             filename:     'Uretim_Raporu_' + (document.getElementById('formNoInput').value || 'Form') + '_' + new Date().toISOString().slice(0,10) + '.pdf',
@@ -341,19 +345,20 @@
         };
 
         html2pdf().from(element).set(opt).save().then(() => {
-            videoEl.style.display = 'block';
+            // إعادة إظهار أزرار العمليات بعد انتهاء التحميل
+            actionCells.forEach(cell => cell.style.display = '');
         });
     }
 
     function resetData() {
         if (confirm("Tüm sayaçları sıfırlamak istediğinizden emin misiniz?")) {
             counts = {};
-            localStorage.setItem('production_counts_v4', JSON.stringify(counts));
+            localStorage.setItem('production_counts_v5', JSON.stringify(counts));
             document.getElementById('productCount').innerText = "0";
             document.getElementById('productName').innerText = "-";
             document.getElementById('lastCode').innerText = "-";
             updateReportTable();
-            alert("Sayaçlar başarıyla sıفırlandı.");
+            alert("Sayaçlar başarıyla sıfırlandı.");
         }
     }
 
@@ -371,5 +376,4 @@
 </script>
 
 </body>
-                                                                               </html>
-                                                    
+</html>
