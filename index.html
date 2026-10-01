@@ -118,8 +118,8 @@
     <h2>Üretim Takip ve Barkod Sayacı</h2>
     
     <div class="form-group">
-        <label>Üretim Form No / Parti No (Zorunlu):</label>
-        <input type="text" id="formNoInput" placeholder="Örn: FORM-01 أو وجبة 1" oninput="saveFormNo()">
+        <label>Üretim Form No (Örn: 355p, 356p):</label>
+        <input type="text" id="formNoInput" placeholder="Form numarasını yazın..." oninput="saveFormNo()">
     </div>
 
     <video id="video"></video>
@@ -160,8 +160,7 @@
 
 <script>
     let products = JSON.parse(localStorage.getItem('production_products')) || {};
-    // التخزين الآن سيتم بناءً على مفتاح يدمج (FormNo_Barcode) ليفصل عداد كل فورم عن الآخر
-    let counts = JSON.parse(localStorage.getItem('production_counts_v2')) || {};
+    let counts = JSON.parse(localStorage.getItem('production_counts_v3')) || {};
     let lastScanned = "";
     let codeReader = new ZXing.BrowserBarcodeReader();
     let selectedDeviceId = null;
@@ -231,7 +230,7 @@
     function handleScannedCode(code) {
         let formNo = document.getElementById('formNoInput').value.trim();
         if (!formNo) {
-            alert("Lütfen önce üst kısımdan 'Üretim Form No' giriniz!");
+            alert("Lütfen önce üst kısımdan Form No giriniz (Örn: 355p)!");
             return;
         }
 
@@ -247,10 +246,9 @@
             }
         }
 
-        // إنشاء مفتاح فريد يربط رقم الفرم بالباركود
         let key = formNo + "_" + code;
         counts[key] = (counts[key] || 0) + 1;
-        localStorage.setItem('production_counts_v2', JSON.stringify(counts));
+        localStorage.setItem('production_counts_v3', JSON.stringify(counts));
 
         document.getElementById('productName').innerText = products[code];
         document.getElementById('productCount').innerText = counts[key];
@@ -263,10 +261,9 @@
         let key = formNo + "_" + code;
         if (counts[key] && counts[key] > 0) {
             counts[key] -= 1;
-            localStorage.setItem('production_counts_v2', JSON.stringify(counts));
+            localStorage.setItem('production_counts_v3', JSON.stringify(counts));
             updateReportTable();
             
-            // تحديث شاشة العرض الحالية إذا كان هو نفس المنتج والفرم
             let currentForm = document.getElementById('formNoInput').value.trim();
             if (formNo === currentForm) {
                 document.getElementById('productCount').innerText = counts[key];
@@ -285,11 +282,10 @@
         let currentFormInput = document.getElementById('formNoInput').value.trim();
         document.getElementById('reportFormNoText').innerHTML = "<b>Form No:</b> " + (currentFormInput || "-");
 
-        // استعراض كافة السجلات المخزنة مرتبطة بالفروم والباركودات
         for (let key in counts) {
             let parts = key.split('_');
             let formNo = parts[0];
-            let code = parts.slice(1).join('_'); // في حال كان الباركود يحتوي على شرطات
+            let code = parts.slice(1).join('_');
             let pName = products[code] || "Ürün";
             let qty = counts[key];
 
@@ -299,7 +295,7 @@
                 <td>${pName}</td>
                 <td><b>${qty}</b></td>
                 <td class="no-pdf">
-                    <button class="action-btn btn-minus" onclick="decreaseCount('${formNo}', '${code}')" title="تقليص قطعة واحدة">-1</button>
+                    <button class="action-btn btn-minus" onclick="decreaseCount('${formNo}', '${code}')" title="تقليص قطعة">-1</button>
                     <button class="action-btn btn-edit" onclick="editProduct('${code}')">Düzenle</button>
                     <button class="action-btn btn-del" onclick="deleteRecord('${formNo}', '${code}')">Sil</button>
                 </td>
@@ -323,7 +319,7 @@
         let key = formNo + "_" + code;
         if (confirm(`Form: ${formNo} için bu ürünü listeden silmek istediğinizden emin misiniz?`)) {
             delete counts[key];
-            localStorage.setItem('production_counts_v2', JSON.stringify(counts));
+            localStorage.setItem('production_counts_v3', JSON.stringify(counts));
             updateReportTable();
             document.getElementById('productName').innerText = "-";
             document.getElementById('productCount').innerText = "0";
@@ -357,7 +353,7 @@
     function resetData() {
         if (confirm("Tüm sayaçları sıfırlamak istediğinizden emin misiniz?")) {
             counts = {};
-            localStorage.setItem('production_counts_v2', JSON.stringify(counts));
+            localStorage.setItem('production_counts_v3', JSON.stringify(counts));
             document.getElementById('productCount').innerText = "0";
             document.getElementById('productName').innerText = "-";
             document.getElementById('lastCode').innerText = "-";
