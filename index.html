@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Üretim Takip ve Barkod Sayacı</title>
-    <!-- ZXing Kütüphanesi ve html2pdf المكتبات اللازمة -->
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
@@ -36,6 +35,14 @@
             background: #000;
             object-fit: cover;
         }
+        select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
         .stats {
             margin-top: 15px;
             padding: 12px;
@@ -63,6 +70,18 @@
         .btn-success { background: #388e3c; color: white; }
         .btn-pdf { background: #e65100; color: white; }
         
+        .action-btn {
+            padding: 5px 8px;
+            font-size: 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            color: white;
+            margin: 2px;
+        }
+        .btn-edit { background: #ffa000; }
+        .btn-del { background: #c62828; }
+
         table {
             width: 100%;
             margin-top: 15px;
@@ -70,9 +89,9 @@
         }
         th, td {
             border: 1px solid #ddd;
-            padding: 8px;
+            padding: 6px;
             text-align: center;
-            font-size: 14px;
+            font-size: 13px;
         }
         th { background-color: #f1f1f1; }
     </style>
@@ -83,6 +102,9 @@
     <h2>Üretim Takip ve Barkod Sayacı</h2>
     
     <video id="video"></video>
+    
+    <select id="cameraSelect" style="display:none;"></select>
+    <button class="btn btn-primary" onclick="startScanner()">Kamerayı Başlat</button>
     
     <div class="stats">
         <p><strong>Son Okunan Barkod:</strong> <span id="lastCode">-</span></p>
@@ -103,6 +125,7 @@
                     <th>Barkod</th>
                     <th>Ürün Adı</th>
                     <th>Adet</th>
+                    <th>İşlemler</th>
                 </tr>
             </thead>
             <tbody id="reportTableBody">
@@ -117,10 +140,46 @@
     let counts = JSON.parse(localStorage.getItem('production_counts')) || {};
     let lastScanned = "";
     let codeReader = new ZXing.BrowserBarcodeReader();
+    let selectedDeviceId = null;
 
     window.addEventListener('load', function () {
         updateReportTable();
-        codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
+        codeReader.listVideoInputDevices()
+            .then((videoInputDevices) => {
+                let sourceSelect = document.getElementById('cameraSelect');
+                if (videoInputDevices.length > 0) {
+                    sourceSelect.style.display = 'block';
+                    selectedDeviceId = videoInputDevices[0].deviceId;
+                    
+                    videoInputDevices.forEach((element) => {
+                        if (element.label.toLowerCase().includes('back') || element.label.toLowerCase().includes('rear') || element.label.toLowerCase().includes('arka')) {
+                            selectedDeviceId = element.deviceId;
+                        }
+                    });
+
+                    sourceSelect.innerHTML = '';
+                    videoInputDevices.forEach((element) => {
+                        let option = document.createElement('option');
+                        option.value = element.deviceId;
+                        option.text = element.label || `Kamera ${sourceSelect.length + 1}`;
+                        if (element.deviceId === selectedDeviceId) {
+                            option.selected = true;
+                        }
+                        sourceSelect.appendChild(option);
+                    });
+
+                    sourceSelect.onchange = () => {
+                        selectedDeviceId = sourceSelect.value;
+                        startScanner();
+                    };
+                }
+            })
+            .catch((err) => { console.error(err); });
+    });
+
+    function startScanner() {
+        codeReader.reset();
+        codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
             if (result) {
                 let code = result.text;
                 if (code !== lastScanned) {
@@ -129,8 +188,11 @@
                     setTimeout(() => { lastScanned = ""; }, 3000);
                 }
             }
-        }).catch(err => console.error(err));
-    });
+        }).catch(err => {
+            console.error(err);
+            alert("Kamera başlatılamadı. Lütfen tarayıcı izinlerini kontrol edin.");
+        });
+    }
 
     function handleScannedCode(code) {
         document.getElementById('lastCode').innerText = code;
@@ -159,8 +221,6 @@
     function updateReportTable() {
         let tbody = document.getElementById('reportTableBody');
         tbody.innerHTML = "";
-        
-        // تعيين تاريخ اليوم في التقرير
         let today = new Date().toLocaleDateString('tr-TR');
         document.getElementById('reportDate').innerText = "Tarih: " + today;
 
@@ -169,8 +229,36 @@
                 <td>${code}</td>
                 <td>${products[code]}</td>
                 <td><b>${counts[code] || 0}</b></td>
+                <td>
+                    <button class="action-btn btn-edit" onclick="editProduct('${code}')">Düzenle</button>
+                    <button class="action-btn btn-del" onclick="deleteProduct('${code}')">Sil</button>
+                </td>
             </tr>`;
             tbody.innerHTML += row;
+        }
+    }
+
+    function editProduct(code) {
+        let currentName = products[code];
+        let newName = prompt("Ürün adını günحيل/düzenle:", currentName);
+        if (newName !== null && newName.trim() !== "") {
+            products[code] = newName.trim();
+            localStorage.setItem('production_products', JSON.stringify(products));
+            updateReportTable();
+            document.getElementById('productName').innerText = products[code];
+        }
+    }
+
+    function deleteProduct(code) {
+        if (confirm("Bu ürünü ve sayacını silmek istediğinizden emin misiniz?")) {
+            delete products[code];
+            delete counts[code];
+            localStorage.setItem('production_products', JSON.stringify(products));
+            localStorage.setItem('production_counts', JSON.stringify(counts));
+            updateReportTable();
+            document.getElementById('productName').innerText = "-";
+            document.getElementById('productCount').innerText = "0";
+            document.getElementById('lastCode').innerText = "-";
         }
     }
 
@@ -180,9 +268,28 @@
     }
 
     function downloadPDF() {
-        // إخفاء الكاميرا مؤقتاً أثناء طباعة أو حفظ الـ PDF ليكون نظيفاً
         let videoEl = document.getElementById('video');
         videoEl.style.display = 'none';
+
+        // إخفاء عمود العمليات مؤقتاً ليكون شكل الـ PDF احترافياً ومرتباً
+        let originalTable = document.getElementById('reportTableBody').innerHTML;
+        
+        // إعادة بناء الجدول بدون عمود العمليات للـ PDF
+        let pdfBody = "";
+        for (let code in products) {
+            pdfBody += `<tr>
+                <td>${code}</td>
+                <td>${products[code]}</td>
+                <td><b>${counts[code] || 0}</b></td>
+            </tr>`;
+        }
+        
+        let headerRow = document.querySelector('thead tr');
+        let actionTh = headerRow.children[3];
+        actionTh.style.display = 'none';
+        
+        let rows = document.querySelectorAll('#reportTableBody tr');
+        rows.forEach(r => r.children[3].style.display = 'none');
 
         let element = document.getElementById('reportArea');
         let opt = {
@@ -194,7 +301,9 @@
         };
 
         html2pdf().from(element).set(opt).save().then(() => {
-            videoEl.style.display = 'block'; // إعادة إظهار الكاميرا بعد التحميل
+            videoEl.style.display = 'block';
+            actionTh.style.display = '';
+            updateReportTable(); // إعادة إظهار أزرار التحكم في الشاشة العادية
         });
     }
 
