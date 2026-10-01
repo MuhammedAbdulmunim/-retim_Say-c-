@@ -26,39 +26,54 @@
             text-align: center;
             color: #333;
             font-size: 20px;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
         video {
             width: 100%;
-            max-height: 250px;
+            max-height: 220px;
             border-radius: 8px;
             background: #000;
             object-fit: cover;
         }
-        select {
+        select, input[type="text"] {
             width: 100%;
             padding: 10px;
-            margin-top: 10px;
+            margin-top: 8px;
             border-radius: 8px;
             border: 1px solid #ccc;
             font-size: 14px;
+            box-sizing: border-box;
+        }
+        .form-group {
+            margin-top: 10px;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        .form-group label {
+            font-size: 13px;
+            font-weight: bold;
+            color: #555;
+            display: block;
+            margin-bottom: 3px;
         }
         .stats {
-            margin-top: 15px;
-            padding: 12px;
+            margin-top: 12px;
+            padding: 10px;
             background: #e8f5e9;
             border-radius: 8px;
             border: 1px solid #c8e6c9;
         }
         .stats p {
-            margin: 5px 0;
-            font-size: 16px;
+            margin: 4px 0;
+            font-size: 15px;
             color: #2e7d32;
         }
         .btn {
             width: 100%;
             padding: 12px;
-            margin-top: 10px;
+            margin-top: 8px;
             border: none;
             border-radius: 8px;
             font-size: 16px;
@@ -69,22 +84,23 @@
         .btn-danger { background: #d32f2f; color: white; }
         .btn-success { background: #388e3c; color: white; }
         .btn-pdf { background: #e65100; color: white; }
+        .btn-undo { background: #f57c00; color: white; }
         
         .action-btn {
-            padding: 5px 8px;
-            font-size: 12px;
+            padding: 4px 6px;
+            font-size: 11px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             color: white;
-            margin: 2px;
+            margin: 1px;
         }
         .btn-edit { background: #ffa000; }
         .btn-del { background: #c62828; }
 
         table {
             width: 100%;
-            margin-top: 15px;
+            margin-top: 12px;
             border-collapse: collapse;
         }
         th, td {
@@ -101,6 +117,11 @@
 <div class="container" id="reportArea">
     <h2>Üretim Takip ve Barkod Sayacı</h2>
     
+    <div class="form-group">
+        <label>Üretim Form No / Parti No:</label>
+        <input type="text" id="formNoInput" placeholder="Örn: FRM-2026-001" oninput="saveFormNo()">
+    </div>
+
     <video id="video"></video>
     
     <select id="cameraSelect" style="display:none;"></select>
@@ -112,20 +133,22 @@
         <p><strong>Bu Ürün Adedi:</strong> <span id="productCount">0</span></p>
     </div>
 
+    <button class="btn btn-undo" onclick="undoLastScan()">↩️ Son Okumayı Geri Al (İptal Et)</button>
     <button class="btn btn-success" onclick="showReport()">Günlük Raporu Göster</button>
-    <button class="btn btn-pdf" onclick="downloadPDF()" style="margin-top: 5px;">PDF Rapor İndir / Yazdır</button>
-    <button class="btn btn-danger" onclick="resetData()" style="margin-top: 5px;">Sayımları Sıfırla</button>
+    <button class="btn btn-pdf" onclick="downloadPDF()">PDF Rapor İndir / Yazdır</button>
+    <button class="btn btn-danger" onclick="resetData()">Sayımları Sıfırla</button>
 
     <div id="reportSection" style="display:block; margin-top: 15px;">
-        <h3>Günlük Özet Raporu</h3>
-        <p style="font-size: 12px; color: #666; text-align: center;" id="reportDate"></p>
+        <h3>Üretim Raporu</h3>
+        <p style="font-size: 12px; color: #666; text-align: center; margin: 2px 0;" id="reportDate"></p>
+        <p style="font-size: 12px; color: #666; text-align: center; margin: 2px 0;" id="reportFormNoText"><b>Form No:</b> -</p>
         <table>
             <thead>
                 <tr>
                     <th>Barkod</th>
                     <th>Ürün Adı</th>
                     <th>Adet</th>
-                    <th>İşlemler</th>
+                    <th class="no-pdf">İşlemler</th>
                 </tr>
             </thead>
             <tbody id="reportTableBody">
@@ -138,12 +161,16 @@
 <script>
     let products = JSON.parse(localStorage.getItem('production_products')) || {};
     let counts = JSON.parse(localStorage.getItem('production_counts')) || {};
+    let lastScannedCode = localStorage.getItem('last_scanned_code') || null; // حفظ آخر باركود للـ Undo
     let lastScanned = "";
     let codeReader = new ZXing.BrowserBarcodeReader();
     let selectedDeviceId = null;
 
     window.addEventListener('load', function () {
+        let savedFormNo = localStorage.getItem('production_form_no') || "";
+        document.getElementById('formNoInput').value = savedFormNo;
         updateReportTable();
+
         codeReader.listVideoInputDevices()
             .then((videoInputDevices) => {
                 let sourceSelect = document.getElementById('cameraSelect');
@@ -177,6 +204,12 @@
             .catch((err) => { console.error(err); });
     });
 
+    function saveFormNo() {
+        let formNo = document.getElementById('formNoInput').value;
+        localStorage.setItem('production_form_no', formNo);
+        document.getElementById('reportFormNoText').innerHTML = "<b>Form No:</b> " + (formNo || "-");
+    }
+
     function startScanner() {
         codeReader.reset();
         codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
@@ -209,7 +242,9 @@
         }
 
         counts[code] = (counts[code] || 0) + 1;
+        lastScannedCode = code; // حفظه لتمكين التراجع
         localStorage.setItem('production_counts', JSON.stringify(counts));
+        localStorage.setItem('last_scanned_code', lastScannedCode);
 
         document.getElementById('productName').innerText = products[code];
         document.getElementById('productCount').innerText = counts[code];
@@ -218,18 +253,48 @@
         playBeep();
     }
 
+    function undoLastScan() {
+        if (!lastScannedCode || !counts[lastScannedCode] || counts[lastScannedCode] <= 0) {
+            alert("Geri alınacak son işlem bulunamadı!");
+            return;
+        }
+
+        let pName = products[lastScannedCode];
+        if (confirm(`Son okunan "${pName}" ürününden 1 adet düşürülsün mü?`)) {
+            counts[lastScannedCode] -= 1;
+            if (counts[lastScannedCode] < 0) counts[lastScannedCode] = 0;
+            
+            localStorage.setItem('production_counts', JSON.stringify(counts));
+            
+            document.getElementById('productName').innerText = pName;
+            document.getElementById('productCount').innerText = counts[lastScannedCode];
+            document.getElementById('lastCode').innerText = lastScannedCode + " (İptal edildi)";
+            
+            updateReportTable();
+            alert("Son okuma başarıyla geri alındı.");
+            lastScannedCode = null;
+            localStorage.removeItem('last_scanned_code');
+        }
+    }
+
     function updateReportTable() {
         let tbody = document.getElementById('reportTableBody');
         tbody.innerHTML = "";
-        let today = new Date().toLocaleDateString('tr-TR');
-        document.getElementById('reportDate').innerText = "Tarih: " + today;
+        
+        // عرض التاريخ والوقت الحالي
+        let now = new Date();
+        let dateStr = now.toLocaleDateString('tr-TR') + ' ' + now.toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'});
+        document.getElementById('reportDate').innerText = "Tarih ve Saat: " + dateStr;
+        
+        let formNo = document.getElementById('formNoInput').value;
+        document.getElementById('reportFormNoText').innerHTML = "<b>Form No:</b> " + (formNo || "-");
 
         for (let code in products) {
             let row = `<tr>
                 <td>${code}</td>
                 <td>${products[code]}</td>
                 <td><b>${counts[code] || 0}</b></td>
-                <td>
+                <td class="no-pdf">
                     <button class="action-btn btn-edit" onclick="editProduct('${code}')">Düzenle</button>
                     <button class="action-btn btn-del" onclick="deleteProduct('${code}')">Sil</button>
                 </td>
@@ -240,7 +305,7 @@
 
     function editProduct(code) {
         let currentName = products[code];
-        let newName = prompt("Ürün adını günحيل/düzenle:", currentName);
+        let newName = prompt("Ürün adını güncell/düzenle:", currentName);
         if (newName !== null && newName.trim() !== "") {
             products[code] = newName.trim();
             localStorage.setItem('production_products', JSON.stringify(products));
@@ -271,30 +336,10 @@
         let videoEl = document.getElementById('video');
         videoEl.style.display = 'none';
 
-        // إخفاء عمود العمليات مؤقتاً ليكون شكل الـ PDF احترافياً ومرتباً
-        let originalTable = document.getElementById('reportTableBody').innerHTML;
-        
-        // إعادة بناء الجدول بدون عمود العمليات للـ PDF
-        let pdfBody = "";
-        for (let code in products) {
-            pdfBody += `<tr>
-                <td>${code}</td>
-                <td>${products[code]}</td>
-                <td><b>${counts[code] || 0}</b></td>
-            </tr>`;
-        }
-        
-        let headerRow = document.querySelector('thead tr');
-        let actionTh = headerRow.children[3];
-        actionTh.style.display = 'none';
-        
-        let rows = document.querySelectorAll('#reportTableBody tr');
-        rows.forEach(r => r.children[3].style.display = 'none');
-
         let element = document.getElementById('reportArea');
         let opt = {
             margin:       10,
-            filename:     'Uretim_Raporu_' + new Date().toISOString().slice(0,10) + '.pdf',
+            filename:     'Uretim_Raporu_' + (document.getElementById('formNoInput').value || 'Form') + '_' + new Date().toISOString().slice(0,10) + '.pdf',
             image:        { type: 'jpeg', quality: 0.98 },
             html2canvas:  { scale: 2 },
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -302,15 +347,15 @@
 
         html2pdf().from(element).set(opt).save().then(() => {
             videoEl.style.display = 'block';
-            actionTh.style.display = '';
-            updateReportTable(); // إعادة إظهار أزرار التحكم في الشاشة العادية
         });
     }
 
     function resetData() {
         if (confirm("Tüm sayaçları sıfırlamak istediğinizden emin misiniz?")) {
             counts = {};
+            lastScannedCode = null;
             localStorage.setItem('production_counts', JSON.stringify(counts));
+            localStorage.removeItem('last_scanned_code');
             document.getElementById('productCount').innerText = "0";
             document.getElementById('productName').innerText = "-";
             document.getElementById('lastCode').innerText = "-";
@@ -333,4 +378,5 @@
 </script>
 
 </body>
-</html>
+            </html>
+            
