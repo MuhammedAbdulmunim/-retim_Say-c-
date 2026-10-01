@@ -46,15 +46,15 @@
         }
         .form-group {
             margin-top: 10px;
-            background: #f9f9f9;
+            background: #e3f2fd;
             padding: 10px;
             border-radius: 8px;
-            border: 1px solid #e0e0e0;
+            border: 1px solid #90caf9;
         }
         .form-group label {
             font-size: 13px;
             font-weight: bold;
-            color: #555;
+            color: #0d47a1;
             display: block;
             margin-bottom: 3px;
         }
@@ -84,7 +84,6 @@
         .btn-danger { background: #d32f2f; color: white; }
         .btn-success { background: #388e3c; color: white; }
         .btn-pdf { background: #e65100; color: white; }
-        .btn-undo { background: #f57c00; color: white; }
         
         .action-btn {
             padding: 4px 6px;
@@ -97,6 +96,7 @@
         }
         .btn-edit { background: #ffa000; }
         .btn-del { background: #c62828; }
+        .btn-minus { background: #d32f2f; font-weight: bold; }
 
         table {
             width: 100%;
@@ -107,7 +107,7 @@
             border: 1px solid #ddd;
             padding: 6px;
             text-align: center;
-            font-size: 13px;
+            font-size: 12px;
         }
         th { background-color: #f1f1f1; }
     </style>
@@ -118,8 +118,8 @@
     <h2>Üretim Takip ve Barkod Sayacı</h2>
     
     <div class="form-group">
-        <label>Üretim Form No / Parti No:</label>
-        <input type="text" id="formNoInput" placeholder="Örn: FRM-2026-001" oninput="saveFormNo()">
+        <label>Üretim Form No / Parti No (Zorunlu):</label>
+        <input type="text" id="formNoInput" placeholder="Örn: FORM-01 أو وجبة 1" oninput="saveFormNo()">
     </div>
 
     <video id="video"></video>
@@ -133,7 +133,6 @@
         <p><strong>Bu Ürün Adedi:</strong> <span id="productCount">0</span></p>
     </div>
 
-    <button class="btn btn-undo" onclick="undoLastScan()">↩️ Son Okumayı Geri Al (İptal Et)</button>
     <button class="btn btn-success" onclick="showReport()">Günlük Raporu Göster</button>
     <button class="btn btn-pdf" onclick="downloadPDF()">PDF Rapor İndir / Yazdır</button>
     <button class="btn btn-danger" onclick="resetData()">Sayımları Sıfırla</button>
@@ -141,10 +140,11 @@
     <div id="reportSection" style="display:block; margin-top: 15px;">
         <h3>Üretim Raporu</h3>
         <p style="font-size: 12px; color: #666; text-align: center; margin: 2px 0;" id="reportDate"></p>
-        <p style="font-size: 12px; color: #666; text-align: center; margin: 2px 0;" id="reportFormNoText"><b>Form No:</b> -</p>
+        <p style="font-size: 12px; color: #0d47a1; text-align: center; margin: 2px 0;" id="reportFormNoText"><b>Form No:</b> -</p>
         <table>
             <thead>
                 <tr>
+                    <th>Form No</th>
                     <th>Barkod</th>
                     <th>Ürün Adı</th>
                     <th>Adet</th>
@@ -160,8 +160,8 @@
 
 <script>
     let products = JSON.parse(localStorage.getItem('production_products')) || {};
-    let counts = JSON.parse(localStorage.getItem('production_counts')) || {};
-    let lastScannedCode = localStorage.getItem('last_scanned_code') || null; // حفظ آخر باركود للـ Undo
+    // التخزين الآن سيتم بناءً على مفتاح يدمج (FormNo_Barcode) ليفصل عداد كل فورم عن الآخر
+    let counts = JSON.parse(localStorage.getItem('production_counts_v2')) || {};
     let lastScanned = "";
     let codeReader = new ZXing.BrowserBarcodeReader();
     let selectedDeviceId = null;
@@ -205,9 +205,10 @@
     });
 
     function saveFormNo() {
-        let formNo = document.getElementById('formNoInput').value;
+        let formNo = document.getElementById('formNoInput').value.trim();
         localStorage.setItem('production_form_no', formNo);
         document.getElementById('reportFormNoText').innerHTML = "<b>Form No:</b> " + (formNo || "-");
+        updateReportTable();
     }
 
     function startScanner() {
@@ -228,52 +229,48 @@
     }
 
     function handleScannedCode(code) {
+        let formNo = document.getElementById('formNoInput').value.trim();
+        if (!formNo) {
+            alert("Lütfen önce üst kısımdan 'Üretim Form No' giriniz!");
+            return;
+        }
+
         document.getElementById('lastCode').innerText = code;
         
         if (!products[code]) {
-            let pName = prompt("Bu barkod yeni! Lütfen ürün adını ve açıklamasını girin:", "Yeni Ürün");
+            let pName = prompt("Bu barkod yeni! Lütfen ürün adını girin:", "Yeni Ürün");
             if (pName) {
                 products[code] = pName;
-                counts[code] = 0;
                 localStorage.setItem('production_products', JSON.stringify(products));
             } else {
                 return;
             }
         }
 
-        counts[code] = (counts[code] || 0) + 1;
-        lastScannedCode = code; // حفظه لتمكين التراجع
-        localStorage.setItem('production_counts', JSON.stringify(counts));
-        localStorage.setItem('last_scanned_code', lastScannedCode);
+        // إنشاء مفتاح فريد يربط رقم الفرم بالباركود
+        let key = formNo + "_" + code;
+        counts[key] = (counts[key] || 0) + 1;
+        localStorage.setItem('production_counts_v2', JSON.stringify(counts));
 
         document.getElementById('productName').innerText = products[code];
-        document.getElementById('productCount').innerText = counts[code];
+        document.getElementById('productCount').innerText = counts[key];
         
         updateReportTable();
         playBeep();
     }
 
-    function undoLastScan() {
-        if (!lastScannedCode || !counts[lastScannedCode] || counts[lastScannedCode] <= 0) {
-            alert("Geri alınacak son işlem bulunamadı!");
-            return;
-        }
-
-        let pName = products[lastScannedCode];
-        if (confirm(`Son okunan "${pName}" ürününden 1 adet düşürülsün mü?`)) {
-            counts[lastScannedCode] -= 1;
-            if (counts[lastScannedCode] < 0) counts[lastScannedCode] = 0;
-            
-            localStorage.setItem('production_counts', JSON.stringify(counts));
-            
-            document.getElementById('productName').innerText = pName;
-            document.getElementById('productCount').innerText = counts[lastScannedCode];
-            document.getElementById('lastCode').innerText = lastScannedCode + " (İptal edildi)";
-            
+    function decreaseCount(formNo, code) {
+        let key = formNo + "_" + code;
+        if (counts[key] && counts[key] > 0) {
+            counts[key] -= 1;
+            localStorage.setItem('production_counts_v2', JSON.stringify(counts));
             updateReportTable();
-            alert("Son okuma başarıyla geri alındı.");
-            lastScannedCode = null;
-            localStorage.removeItem('last_scanned_code');
+            
+            // تحديث شاشة العرض الحالية إذا كان هو نفس المنتج والفرم
+            let currentForm = document.getElementById('formNoInput').value.trim();
+            if (formNo === currentForm) {
+                document.getElementById('productCount').innerText = counts[key];
+            }
         }
     }
 
@@ -281,22 +278,30 @@
         let tbody = document.getElementById('reportTableBody');
         tbody.innerHTML = "";
         
-        // عرض التاريخ والوقت الحالي
         let now = new Date();
         let dateStr = now.toLocaleDateString('tr-TR') + ' ' + now.toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'});
         document.getElementById('reportDate').innerText = "Tarih ve Saat: " + dateStr;
         
-        let formNo = document.getElementById('formNoInput').value;
-        document.getElementById('reportFormNoText').innerHTML = "<b>Form No:</b> " + (formNo || "-");
+        let currentFormInput = document.getElementById('formNoInput').value.trim();
+        document.getElementById('reportFormNoText').innerHTML = "<b>Form No:</b> " + (currentFormInput || "-");
 
-        for (let code in products) {
+        // استعراض كافة السجلات المخزنة مرتبطة بالفروم والباركودات
+        for (let key in counts) {
+            let parts = key.split('_');
+            let formNo = parts[0];
+            let code = parts.slice(1).join('_'); // في حال كان الباركود يحتوي على شرطات
+            let pName = products[code] || "Ürün";
+            let qty = counts[key];
+
             let row = `<tr>
+                <td><b>${formNo}</b></td>
                 <td>${code}</td>
-                <td>${products[code]}</td>
-                <td><b>${counts[code] || 0}</b></td>
+                <td>${pName}</td>
+                <td><b>${qty}</b></td>
                 <td class="no-pdf">
+                    <button class="action-btn btn-minus" onclick="decreaseCount('${formNo}', '${code}')" title="تقليص قطعة واحدة">-1</button>
                     <button class="action-btn btn-edit" onclick="editProduct('${code}')">Düzenle</button>
-                    <button class="action-btn btn-del" onclick="deleteProduct('${code}')">Sil</button>
+                    <button class="action-btn btn-del" onclick="deleteRecord('${formNo}', '${code}')">Sil</button>
                 </td>
             </tr>`;
             tbody.innerHTML += row;
@@ -305,7 +310,7 @@
 
     function editProduct(code) {
         let currentName = products[code];
-        let newName = prompt("Ürün adını güncell/düzenle:", currentName);
+        let newName = prompt("Ürün adını güncelle:", currentName);
         if (newName !== null && newName.trim() !== "") {
             products[code] = newName.trim();
             localStorage.setItem('production_products', JSON.stringify(products));
@@ -314,12 +319,11 @@
         }
     }
 
-    function deleteProduct(code) {
-        if (confirm("Bu ürünü ve sayacını silmek istediğinizden emin misiniz?")) {
-            delete products[code];
-            delete counts[code];
-            localStorage.setItem('production_products', JSON.stringify(products));
-            localStorage.setItem('production_counts', JSON.stringify(counts));
+    function deleteRecord(formNo, code) {
+        let key = formNo + "_" + code;
+        if (confirm(`Form: ${formNo} için bu ürünü listeden silmek istediğinizden emin misiniz?`)) {
+            delete counts[key];
+            localStorage.setItem('production_counts_v2', JSON.stringify(counts));
             updateReportTable();
             document.getElementById('productName').innerText = "-";
             document.getElementById('productCount').innerText = "0";
@@ -353,9 +357,7 @@
     function resetData() {
         if (confirm("Tüm sayaçları sıfırlamak istediğinizden emin misiniz?")) {
             counts = {};
-            lastScannedCode = null;
-            localStorage.setItem('production_counts', JSON.stringify(counts));
-            localStorage.removeItem('last_scanned_code');
+            localStorage.setItem('production_counts_v2', JSON.stringify(counts));
             document.getElementById('productCount').innerText = "0";
             document.getElementById('productName').innerText = "-";
             document.getElementById('lastCode').innerText = "-";
@@ -378,5 +380,5 @@
 </script>
 
 </body>
-            </html>
-            
+    </html>
+    
