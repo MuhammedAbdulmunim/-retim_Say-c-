@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="tr" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Üretim Hattı Ürün Sayma ve Barkod Sistemi</title>
+    <!-- ZXing Barkod Okuma Kütüphanesi -->
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 10px;
+            text-align: center;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+        #video-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .counter-box {
+            background: #2ecc71;
+            color: white;
+            font-size: 24px;
+            padding: 15px;
+            margin: 15px auto;
+            max-width: 500px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .log-box {
+            background: #fff;
+            border: 1px solid #ddd;
+            max-width: 500px;
+            margin: 10px auto;
+            padding: 10px;
+            border-radius: 8px;
+            height: 180px;
+            overflow-y: auto;
+            text-align: left;
+            direction: ltr;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        button {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Üretim Hattı Barkod ve Sayaç Sistemi</h2>
+    <p>Telefon kamerasını üretim bandındaki ürünlerin barkoduna tutun</p>
+
+    <div id="video-container">
+        <video id="video" autoplay playsinline></video>
+    </div>
+
+    <div class="counter-box">
+        Toplam Ürün Sayısı: <span id="count">0</span>
+    </div>
+
+    <div>
+        <button onclick="resetCounter()">Sayacı Sıfırla</button>
+    </div>
+
+    <h3>Okunan Ürünler ve Barkod Geçmişi:</h3>
+    <div id="log" class="log-box"></div>
+
+    <script>
+        // 📌 Ürün Veritabanı: Barkod numaralarını ve ürün isimlerini buraya ekleyin
+        const productDatabase = {
+            "6281000001": "Mango Suyu 300 ml",
+            "6281000002": "Kıvamlı Süt Kutusu",
+            "12345678": "Örnek Ürün 1"
+            // Buraya yeni barkodlar ekleyebilirsiniz: "barkod_numarasi": "Ürün Adı"
+        };
+
+        let totalCount = 0;
+        let lastScannedCode = "";
+        let lastScanTime = 0;
+
+        const codeReader = new ZXing.BrowserBarcodeReader();
+        const countElement = document.getElementById('count');
+        const logElement = document.getElementById('log');
+
+        async function startScanner() {
+            try {
+                const videoInputDevices = await codeReader.listVideoInputDevices();
+                let selectedDeviceId = videoInputDevices[0].deviceId;
+                
+                // Arka kamerayı otomatik seçmeye çalış
+                for (const device of videoInputDevices) {
+                    if (device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('arka')) {
+                        selectedDeviceId = device.deviceId;
+                        break;
+                    }
+                }
+
+                // Kamerayı başlat ve sürekli barkod okumaya başla
+                codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+                    if (result) {
+                        const scannedCode = result.getText();
+                        const currentTime = new Date().getTime();
+
+                        // Aynı ürünün üst üste hızlıca tekrar sayılmasını önlemek için 2 saniye kuralı
+                        if (scannedCode !== lastScannedCode || (currentTime - lastScanTime) > 2000) {
+                            totalCount++;
+                            lastScannedCode = scannedCode;
+                            lastScanTime = currentTime;
+
+                            // Ekranda sayacı güncelle
+                            countElement.innerText = totalCount;
+
+                            // Barkoda göre ürün adını bul, kayıtlı değilse "Bilinmeyen Ürün" yaz
+                            const productName = productDatabase[scannedCode] || "Kayıtsız Ürün (Bilinmiyor)";
+
+                            // Log paneline ekle
+                            const timeString = new Date().toLocaleTimeString();
+                            logElement.innerHTML += `[${timeString}] Barkod: ${scannedCode} | Ürün: ${productName} (Toplam: ${totalCount})<br>`;
+                            logElement.scrollTop = logElement.scrollHeight;
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error("Kamera başlatılamadı: ", err);
+                alert("Kamera açılamadı, lütfen tarayıcı izinlerini kontrol edin.");
+            }
+        }
+
+        function resetCounter() {
+            totalCount = 0;
+            lastScannedCode = "";
+            countElement.innerText = totalCount;
+            logElement.innerHTML = "";
+        }
+
+        // Sayfa açıldığında otomatik başlat
+        window.addEventListener('load', startScanner);
+    </script>
+
+</body>
+</html>
