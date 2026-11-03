@@ -137,7 +137,6 @@
     <button class="btn btn-pdf" onclick="downloadPDF()">PDF Rapor İndir / Yazdır</button>
     <button class="btn btn-danger" onclick="resetData()">Sayımları Sıfırla</button>
 
-    <!-- هذا هو القسم الذي سيتم طباعته في الـ PDF حصراً -->
     <div id="pdfReportArea" style="display:block; margin-top: 15px; background: #fff; padding: 10px; border-radius: 8px;">
         <h3 style="text-align: center; color: #333; margin-bottom: 5px;">Üretim Raporu</h3>
         <p style="font-size: 12px; color: #666; text-align: center; margin: 2px 0;" id="reportDate"></p>
@@ -329,24 +328,27 @@
     }
 
     function downloadPDF() {
-        // تحديد القسم المراد طباعته حصراً (التقرير فقط بدون الكاميرا والأزرار العلوية)
         let element = document.getElementById('pdfReportArea');
-        
-        // إخفاء أزرار العمليات (Düzenle, Sil, -1) مؤقتاً أثناء إنشاء ملف الـ PDF
         let actionCells = document.querySelectorAll('.no-pdf');
+        
+        // إخفاء أعمدة الأزرار للطباعة النظيفة
         actionCells.forEach(cell => cell.style.display = 'none');
 
         let opt = {
             margin:       10,
             filename:     'Uretim_Raporu_' + (document.getElementById('formNoInput').value || 'Form') + '_' + new Date().toISOString().slice(0,10) + '.pdf',
             image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2 },
+            html2canvas:  { scale: 2, useCORS: true },
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
         html2pdf().from(element).set(opt).save().then(() => {
-            // إعادة إظهار أزرار العمليات بعد انتهاء التحميل
+            // إعادة إظهار الأزرار على الشاشة بعد التنزيل
             actionCells.forEach(cell => cell.style.display = '');
+        }).catch(err => {
+            console.error(err);
+            actionCells.forEach(cell => cell.style.display = '');
+            alert("PDF oluşturulurken bir hata oluştu.");
         });
     }
 
